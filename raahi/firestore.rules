@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if isSelf(userId);
+      allow update: if isSelf(userId) && !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['trustScore', 'kyc.status', 'kyc.amlRisk']);
+    }
+
+    match /trips/{tripId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.travelerId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.travelerId == request.auth.uid;
+    }
+
+    match /parcels/{parcelId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update: if signedIn() && resource.data.senderId == request.auth.uid;
+    }
+
+    match /jobs/{jobId} {
+      allow read, update: if signedIn() && (resource.data.senderId == request.auth.uid || resource.data.travelerId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.senderId == request.auth.uid;
+    }
+
+    match /threads/{threadId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.participantIds;
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.fromId == request.auth.uid;
+    }
+
+    match /consents/{id} {
+      allow read, write: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
